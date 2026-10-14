@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/* Theme tokens. The toggle flips data-theme on <html>; every component reads these variables. */
+:root, :root[data-theme="dark"] {
+  --bg: #08111A; --surface: #0F1720; --elev: #17212B; --line: #263440;
+  --tx: #F7F2E8; --tx2: #AAB6C2; --tx3: #71808D; --info: #8DB4CC;
+  --btn: #F7F2E8; --btn-tx: #08111A;
+  --sh: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #F2F4F6; --surface: #FFFFFF; --elev: #EAEEF2; --line: #D9E0E6;
+  --tx: #0B1620; --tx2: #45545F; --tx3: #62717D; --info: #2F6B8F;
+  --btn: #0B1620; --btn-tx: #F7F2E8;
+  --sh: 0 1px 2px rgba(11, 22, 32, 0.05), 0 14px 32px -18px rgba(11, 22, 32, 0.18);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-elev: var(--elev);
+  --color-line: var(--line);
+  --color-tx: var(--tx);
+  --color-tx2: var(--tx2);
+  --color-tx3: var(--tx3);
+  --color-info: var(--info);
+  --color-btn: var(--btn);
+  --color-btn-tx: var(--btn-tx);
+}
+
+html { background: var(--bg); scroll-padding-top: 5rem; }
+body { background: var(--bg); color: var(--tx); -webkit-font-smoothing: antialiased; text-size-adjust: 100%; transition: background-color .3s, color .3s; }
+:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; border-radius: 6px; }
+
+@keyframes map-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pulse-soft { 50% { opacity: .55; } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* Responsive data table: a normal table on wide screens, stacked rows on phones. */
+.rtable { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.rtable th { padding: 14px 16px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; font-weight: 500; color: var(--tx3); white-space: nowrap; }
+.rtable th[aria-sort="ascending"], .rtable th[aria-sort="descending"] { color: var(--tx); }
+.rtable td { padding: 15px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.rtable tbody tr:last-child td { border-bottom: 0; }
+.rtable tbody tr:hover td { background: color-mix(in srgb, var(--elev) 55%, transparent); }
+.rtable .num { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) {
+  .rtable thead { display: none; }
+  .rtable, .rtable tbody { display: block; }
+  .rtable tr { display: grid; grid-template-columns: 1fr auto; gap: 10px 12px; padding: 16px 10px; border-bottom: 1px solid var(--line); }
+  .rtable tbody tr:last-child { border-bottom: 0; }
+  .rtable td { display: block; padding: 0; border: 0; }
+  .rtable tbody tr:hover td { background: none; }
+  .rtable td.c-p { grid-column: 1 / -1; order: 3; }
+  .rtable td.c-b { order: 2; text-align: right; }
+  .rtable td.c-t { grid-column: 1 / -1; order: 4; color: var(--tx3); font-size: 13px; }
+}
