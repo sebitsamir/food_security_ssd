@@ -14,6 +14,13 @@
     .\dev.ps1 lint            lint and type-check everything
     .\dev.ps1 e2e             browser walkthrough (the API and a built website must be running)
 
+  Production on Windows (no Docker) — PostgreSQL + real model required:
+    .\dev.ps1 prod-env        copy backend\.env.production.example → backend\.env (if missing)
+    .\dev.ps1 prod-bootstrap  migrate DB + load geographies (no synthetic seed)
+    .\dev.ps1 prod-api        run API without reload (ENV from backend\.env)
+    .\dev.ps1 prod-web        production Next.js build + start
+    .\dev.ps1 prod            API + website in two windows (after model is activated)
+
   If PowerShell refuses to run scripts, allow it for this window only:
     Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 #>
@@ -22,7 +29,7 @@ param(
   [Parameter(Position = 0)]
   [ValidateSet(
     'setup', 'db', 'api', 'web', 'dev', 'test', 'lint', 'e2e',
-    'help'
+    'prod-env', 'prod-bootstrap', 'prod-api', 'prod-web', 'prod', 'help'
   )]
   [string]$Task = 'help'
 )
@@ -161,6 +168,68 @@ switch ($Task) {
     Run $Backend $VenvPy @('-m', 'playwright', 'install', 'chromium')
     Step 'Running the browser walkthrough (needs the API and `npm run build; npm start` running)'
     Run $Root $VenvPy @((Join-Path $Root 'scripts\e2e_smoke.py'))
+  }
+
+  'prod-env' {
+    $envFile = Join-Path $Backend '.env'
+    $example = Join-Path $Backend '.env.production.example'
+    if (-not (Test-Path $example)) { throw "Missing $example" }
+    if (Test-Path $envFile) {
+      Write-Host "backend\.env already exists — edit it by hand (ENV=production, PostgreSQL DATABASE_URL, CORS_ORIGINS)." -ForegroundColor Yellow
+      Write-Host "Template: backend\.env.production.example"
+    } else {
+      Copy-Item $example $envFile
+      Write-Host "Created backend\.env from .env.production.example — edit DATABASE_URL and CORS_ORIGINS." -ForegroundColor Green
+    }
+    $feEnv = Join-Path $Frontend '.env.local'
+    $feExample = Join-Path $Frontend '.env.production.example'
+    if (-not (Test-Path $feEnv) -and (Test-Path $feExample)) {
+      Copy-Item $feExample $feEnv
+      Write-Host "Created frontend\.env.local (API_URL=http://localhost:8000)." -ForegroundColor Green
+    }
+  }
+
+  'prod-bootstrap' {
+    Require-Venv
+    Step 'Production bootstrap: migrate + load geographies (no synthetic seed)'
+    Run $Backend $VenvPy @('-m', 'scripts.bootstrap_production')
+    Write-Host @"
+
+Next (from backend\, with your real model already in models\<version>\):
+  .\.venv\Scripts\python.exe -m scripts.activate_model <version>
+  .\.venv\Scripts\python.exe -m scripts.import_observations path\to\observations.csv
+  .\.venv\Scripts\python.exe -m scripts.score_forecasts YYYY-MM
+  ..\dev.ps1 prod
+
+"@ -ForegroundColor Cyan
+  }
+
+  'prod-api' {
+    Require-Venv
+    Step 'Starting API (no reload; uses backend\.env)'
+    Run $Backend $VenvPy @('-m', 'uvicorn', 'app.main:create_app', '--factory', '--host', '0.0.0.0', '--port', '8000', '--proxy-headers')
+  }
+
+  'prod-web' {
+    Require-Node
+    Step 'Building the website for production'
+    Run $Frontend 'npm' @('run', 'build')
+    Step 'Starting the website (http://localhost:3000)'
+    Run $Frontend 'npm' @('run', 'start')
+  }
+
+  'prod' {
+    Require-Venv
+    Require-Node
+    Step 'Building the website'
+    Run $Frontend 'npm' @('run', 'build')
+    Step 'Starting API and website in two new windows'
+    $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
+    Start-Process $shell -ArgumentList '-NoExit', '-Command', "`$host.UI.RawUI.WindowTitle='API (prod)'; Set-Location '$Backend'; & '$VenvPy' -m uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000 --proxy-headers"
+    Start-Process $shell -ArgumentList '-NoExit', '-Command', "`$host.UI.RawUI.WindowTitle='Website (prod)'; Set-Location '$Frontend'; npm run start"
+    Write-Host 'API:     http://localhost:8000/readyz'
+    Write-Host 'Website: http://localhost:3000'
+    Write-Host 'Close the two windows to stop.'
   }
 
   default {

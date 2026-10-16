@@ -1,0 +1,75 @@
+# Production-oriented stack. You supply PostgreSQL credentials, the website origin,
+# and a real (non-synthetic) model under ./models/<version>/ before starting.
+#
+#   1. Copy backend/.env.production.example → set secrets / CORS_ORIGINS
+#   2. Place model artifacts in ./models/<version>/
+#   3. docker compose -f docker-compose.prod.yml up --build
+#   4. On first boot, after migrate finishes, activate + import + score (see README Deploy)
+#
+# ENV=production refuses synthetic geo/models and SQLite.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-risk}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    build: ./backend
+    command: sh -c "alembic upgrade head && python -m scripts.load_geographies"
+    environment: &api-env
+      ENV: production
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-risk}
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS to your website origin}
+      MODELS_DIR: /models
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PREDICTION_RATE_LIMIT: ${PREDICTION_RATE_LIMIT:-30}
+      PERSIST_PREDICTIONS: ${PERSIST_PREDICTIONS:-true}
+    volumes:
+      - ./backend/models:/models:ro
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    build: ./backend
+    environment: *api-env
+    volumes:
+      - ./backend/models:/models:ro
+    ports: ["8000:8000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+    # API process will not become ready until a non-synthetic model is active.
+
+  web:
+    build: ./frontend
+    environment:
+      API_URL: http://api:8000
+    ports: ["3000:3000"]
+    depends_on: [api]
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  pgdata:
