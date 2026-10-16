@@ -1,0 +1,46 @@
+# Local development stack. For production, build the images in CI and deploy them with your
+# orchestrator, with ENV=production (which refuses synthetic boundaries and synthetic models).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: risk
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d risk"]
+      interval: 5s
+      retries: 10
+
+  migrate:
+    build: ./backend
+    # Development only: trains the SYNTHETIC dev model and seeds sample data.
+    command: sh -c "alembic upgrade head && python -m scripts.load_geographies && python -m scripts.seed_dev"
+    environment: &api-env
+      ENV: development
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/risk
+      CORS_ORIGINS: http://localhost:3000
+      MODELS_DIR: /models
+    volumes: [models:/models]
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    build: ./backend
+    environment: *api-env
+    volumes: [models:/models:ro]
+    ports: ["8000:8000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    build: ./frontend
+    environment:
+      API_URL: http://api:8000
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  models:
