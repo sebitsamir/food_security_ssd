@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # Empty means uvicorn default (127.0.0.1). Set to your load balancer in production.
     forwarded_allow_ips: str = ""
     # Tests only: allow in-memory SQLite while exercising other production guards.
+    relax_production_db_check: bool = False
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -33,7 +34,12 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.env == "production"
 
+    @model_validator(mode="after")
+    def _production_guards(self) -> Self:
+        if not self.is_production:
+            return self
         url = self.database_url.lower()
+        if url.startswith("sqlite") and not self.relax_production_db_check:
             raise ValueError(
                 "ENV=production refuses SQLite. Set DATABASE_URL to PostgreSQL "
                 "(postgresql+psycopg://...)."
