@@ -13,7 +13,7 @@ COPY data data
 COPY models /models
 
 # Model artifacts live outside the image: mount them at /models (read-only for the API).
-RUN useradd --system --uid 10001 app && mkdir /models && chown app /models
+RUN useradd --system --uid 10001 app && chown -R app:app /models
 USER app
 EXPOSE 8000
 
