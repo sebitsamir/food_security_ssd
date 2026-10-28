@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from starlette.middleware.gzip import GZipMiddleware
 
-from app.api.routes import counties, forecasts, geo, health, predictions
+from app.api.routes import counties, competition, forecasts, geo, health, predictions
 from app.core.config import Settings, get_settings
 from app.core.errors import install_error_handlers
 from app.core.logging import configure_logging
@@ -97,4 +97,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(forecasts.router)
     app.include_router(counties.router)
     app.include_router(predictions.router)
+    app.include_router(competition.router)
     return app

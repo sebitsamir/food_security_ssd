@@ -1,10 +1,7 @@
 ﻿*
-!.gitkeep
 !.gitignore
+!.gitkeep
 !README.md
-!1.0.0/
-1.0.0/*
-!1.0.0/metadata.json
-!1.0.0/pipeline.joblib
-!1.0.0/sensitivity.joblib
-!1.0.0/validation.csv
+!competition-run-2026-10-28/
+competition-run-2026-10-28/*
+!competition-run-2026-10-28/official_test_predictions.csv
