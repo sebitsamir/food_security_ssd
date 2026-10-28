@@ -27,13 +27,17 @@ def make_settings(**kw: object) -> Settings:
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
-    app = create_app(make_settings())
+def client(tmp_path: Path) -> Iterator[TestClient]:
+    # Keep no-model tests isolated from the real model artifacts.
+    app = create_app(make_settings(models_dir=tmp_path))
+
     Base.metadata.create_all(app.state.engine)
-    with app.state.session_factory() as s:
-        seed(s)
-    with TestClient(app) as c:
-        yield c
+
+    with app.state.session_factory() as session:
+        seed(session)
+
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 def seed(s: Session) -> None:

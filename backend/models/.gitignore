@@ -1,5 +1,10 @@
-*
+﻿*
 !.gitkeep
 !.gitignore
-!.README.md
 !README.md
+!1.0.0/
+1.0.0/*
+!1.0.0/metadata.json
+!1.0.0/pipeline.joblib
+!1.0.0/sensitivity.joblib
+!1.0.0/validation.csv

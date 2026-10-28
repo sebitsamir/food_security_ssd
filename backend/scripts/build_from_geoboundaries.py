@@ -11,8 +11,10 @@ import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from shapely.geometry import box, shape
+from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 from shapely.validation import make_valid
 
@@ -49,60 +51,68 @@ def _norm(name: str) -> str:
     return s
 
 
-def _load(path: Path) -> dict[str, object]:
-    return json.loads(path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+def _load(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _clean(geom: object) -> object:
-    from shapely.geometry.base import BaseGeometry  # noqa: PLC0415
+def _clean(geom: BaseGeometry) -> BaseGeometry:
+    g = make_valid(geom)
 
-    g = make_valid(geom)  # type: ignore[arg-type]
     if g.geom_type == "GeometryCollection":
-        polys = [p for p in g.geoms if p.geom_type in ("Polygon", "MultiPolygon")]
-        g = unary_union(polys)
-    return g.simplify(0.006, preserve_topology=True)  # type: ignore[return-value]
+        polygons = [part for part in g.geoms if part.geom_type in ("Polygon", "MultiPolygon")]
+        g = unary_union(polygons)
+
+    return g.simplify(0.006, preserve_topology=True)
 
 
-def _feature(props: dict[str, object], geom: object) -> dict[str, object]:
+def _feature(
+    props: dict[str, Any],
+    geom: BaseGeometry,
+) -> dict[str, Any]:
+    cleaned = _clean(geom)
+
     return {
         "type": "Feature",
         "properties": props,
-        "geometry": json.loads(json.dumps(_clean(geom).__geo_interface__)),  # type: ignore[union-attr]
+        "geometry": json.loads(json.dumps(cleaned.__geo_interface__)),
     }
 
 
-def _carve_akoka(melut: object) -> tuple[object, object]:
-    """Split the southern ~28% of Melut into Akoka (historical neighbour)."""
-    minx, miny, maxx, maxy = melut.bounds  # type: ignore[union-attr]
-    cut_y = miny + (maxy - miny) * 0.28
-    akoka = melut.intersection(box(minx - 0.01, miny - 0.01, maxx + 0.01, cut_y))  # type: ignore[union-attr]
-    rest = melut.difference(akoka)  # type: ignore[union-attr]
-    if akoka.is_empty or rest.is_empty or akoka.area < 1e-4:  # type: ignore[union-attr]
-        raise SystemExit("Failed to carve Akoka from Melut")
-    return rest, akoka
+def _carve_akoka(
+    melut: BaseGeometry,
+) -> tuple[BaseGeometry, BaseGeometry]:
+    """Split the southern ~28% of Melut into Akoka."""
 
+    minx, miny, maxx, maxy = melut.bounds
+    cut_y = miny + (maxy - miny) * 0.28
+
+    akoka = melut.intersection(box(minx - 0.01, miny - 0.01, maxx + 0.01, cut_y))
+    rest = melut.difference(akoka)
+
+    if akoka.is_empty or rest.is_empty or akoka.area < 1e-4:
+        raise SystemExit("Failed to carve Akoka from Melut")
+
+    return rest, akoka
 
 
 def main() -> None:
     adm1 = _load(SRC / "geoBoundaries-SSD-ADM1.geojson")
     adm2 = _load(SRC / "geoBoundaries-SSD-ADM2.geojson")
 
-    adm1_by: dict[str, object] = {
-        _norm(f["properties"]["shapeName"]): f for f in adm1["features"]  # type: ignore[index]
-    }
-    adm2_by: dict[str, object] = {}
-    for f in adm2["features"]:  # type: ignore[union-attr]
-        adm2_by[_norm(f["properties"]["shapeName"])] = shape(f["geometry"])  # type: ignore[index]
+    adm1_by: dict[str, Any] = {_norm(f["properties"]["shapeName"]): f for f in adm1["features"]}
+    adm2_by: dict[str, BaseGeometry] = {}
+    for f in adm2["features"]:
+        adm2_by[_norm(f["properties"]["shapeName"])] = shape(f["geometry"])
 
-    states_fc: list[dict[str, object]] = []
-    counties_fc: list[dict[str, object]] = []
+    states_fc: list[dict[str, Any]] = []
+    counties_fc: list[dict[str, Any]] = []
     missing: list[str] = []
 
     for state_pcode, state_name, _site, county_names in STATES:
         key = _norm(state_name)
         if key not in adm1_by:
             raise SystemExit(f"ADM1 missing state: {state_name}")
-        state_geom = shape(adm1_by[key]["geometry"])  # type: ignore[index]
+        state_geom = shape(adm1_by[key]["geometry"])
         states_fc.append(_feature({"pcode": state_pcode, "name": state_name}, state_geom))
 
         for i, cname in enumerate(county_names, start=1):
@@ -121,11 +131,11 @@ def main() -> None:
         raise SystemExit(f"ADM2 missing counties: {missing}")
 
     # Carve Akoka from Melut; rewrite Melut geom and insert Akoka with its fixture pcode.
-    melut_idx = next(i for i, f in enumerate(counties_fc) if f["properties"]["name"] == "Melut")  # type: ignore[index]
+    melut_idx = next(i for i, f in enumerate(counties_fc) if f["properties"]["name"] == "Melut")
     melut_feat = counties_fc[melut_idx]
-    melut_geom = shape(melut_feat["geometry"])  # type: ignore[index]
+    melut_geom = shape(melut_feat["geometry"])
     melut_rest, akoka_geom = _carve_akoka(melut_geom)
-    counties_fc[melut_idx] = _feature(melut_feat["properties"], melut_rest)  # type: ignore[arg-type]
+    counties_fc[melut_idx] = _feature(melut_feat["properties"], melut_rest)
 
     akoka_pcode = next(
         f"{sp}{i:02d}"
