@@ -10,6 +10,7 @@ COPY alembic alembic
 COPY alembic.ini .
 COPY scripts scripts
 COPY data data
+COPY models /models
 
 # Model artifacts live outside the image: mount them at /models (read-only for the API).
 RUN useradd --system --uid 10001 app && mkdir /models && chown app /models
