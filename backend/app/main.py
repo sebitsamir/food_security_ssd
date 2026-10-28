@@ -47,7 +47,6 @@ def _load_active_model(app: FastAPI, settings: Settings) -> LoadedModel | None:
         return None
 
 
-
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
