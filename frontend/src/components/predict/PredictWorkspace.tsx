@@ -14,7 +14,7 @@ import { formFromCounty, parseForm, type FieldErrors, type FormState } from '@/l
 import { MONTHS } from '@/lib/format';
 import { PHASES } from '@/lib/phases';
 import { formatPct } from '@/lib/risk';
-import { PredictionResponseSchema, type CountyRecord, type PredictionResponse } from '@/lib/schemas';
+import { PredictionResponseSchema, type PredictionResponse } from '@/lib/schemas';
 import { predictionCsv } from '@/lib/export/csv';
 import { makePredictionPdf } from '@/lib/export/reports';
 import { dayStamp, niceStamp } from '@/lib/export/download';
@@ -38,7 +38,7 @@ async function requestPrediction(payload: unknown): Promise<PredictionResponse> 
   return parsed.data;
 }
 
-export function PredictWorkspace({ counties, period, initialCounty }: { counties: CountyRecord[]; period: string; initialCounty?: string }) {
+export function PredictWorkspace({ counties, period, initialCounty }: { counties: import('@/lib/predictForm').PredictCounty[]; period: string; initialCounty?: string }) {
   const byPcode = useMemo(() => new Map(counties.map((c) => [c.pcode, c])), [counties]);
   const first = byPcode.get(initialCounty ?? '') ?? counties[0];
   const [form, setForm] = useState<FormState | null>(first ? formFromCounty(first, period) : null);
@@ -59,7 +59,7 @@ export function PredictWorkspace({ counties, period, initialCounty }: { counties
   const err = (k: keyof FieldErrors) => errors[k];
   const bad = (k: keyof FieldErrors) => (errors[k] ? true : undefined);
 
-  const pick = (c: CountyRecord) => { setForm(formFromCounty(c, period)); setErrors({}); };
+  const pick = (c: import('@/lib/predictForm').PredictCounty) => { setForm(formFromCounty(c, period)); setErrors({}); };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();

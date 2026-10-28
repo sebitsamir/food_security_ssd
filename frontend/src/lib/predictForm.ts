@@ -7,6 +7,8 @@ export type FormState = {
 };
 export type FieldErrors = Partial<Record<'population' | 'year' | 'pct' | 'production' | 'gap', string>>;
 
+export type PredictCounty = Pick<CountyRecord, 'pcode' | 'name' | 'state_pcode' | 'state_name' | 'facts'>;
+
 const num = (s: string): number => {
   const t = s.replace(/[,\s]/g, '');
   return t === '' ? Number.NaN : Number(t);
@@ -14,7 +16,7 @@ const num = (s: string): number => {
 const fmt = (n: number): string => (Number.isFinite(n) ? n.toLocaleString('en-US') : '');
 
 /** Fills the form from a county's latest known inputs. Everything stays editable. */
-export function formFromCounty(c: CountyRecord, period: string): FormState {
+export function formFromCounty(c: PredictCounty, period: string): FormState {
   const { year, month } = periodParts(period);
   const f = c.facts;
   return {
