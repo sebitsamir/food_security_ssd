@@ -1,0 +1,68 @@
+{
+  "name": "South Sudan Food Security Risk Model",
+  "version": "1.0.0",
+  "algorithm": "LogisticRegression",
+  "parameters": {
+    "C": 1.0,
+    "class_weight": "balanced",
+    "max_iter": 5000,
+    "solver": "liblinear",
+    "random_state": 42
+  },
+  "sensitivity_parameters": {
+    "C": 100.0,
+    "class_weight": "balanced",
+    "max_iter": 5000,
+    "solver": "liblinear",
+    "random_state": 42
+  },
+  "metric": "roc_auc",
+  "validation_strategy": "expanding_window_temporal_validation_last_12_periods",
+  "synthetic": false,
+  "trained_at": "2026-10-28T04:08:39+00:00",
+  "sklearn_version": "1.8.0",
+  "features": [
+    "state",
+    "county",
+    "prior_period_ipc_phase",
+    "population",
+    "start_year",
+    "start_month",
+    "prior_period_phase3plus_pct",
+    "prior_year_cereal_production_tonnes",
+    "prior_year_cereal_gap_tonnes",
+    "prior_ipc_severity"
+  ],
+  "training_periods": 39,
+  "training_counties": 79,
+  "training_rows": 3099,
+  "training_ranges": {
+    "population": [
+      7693.0,
+      807040.0
+    ],
+    "start_year": [
+      2014.0,
+      2025.0
+    ]
+  },
+  "data_source": "Official IndabaX South Sudan 2026 competition training data (Train__4_.csv)",
+  "target": "food_insecurity_risk",
+  "target_definition": "1 = IPC Phase 3+ (Crisis-or-worse); 0 = below Crisis",
+  "limitations": [
+    "Predicted probability is not an official IPC classification.",
+    "Probability calibration has not been established.",
+    "Forecast rows are based only on competition-provided features.",
+    "Only the official competition training data was used; no external data or AutoML."
+  ],
+  "artifacts": {
+    "pipeline": {
+      "file": "pipeline.joblib",
+      "sha256": "b3a25995ed9774a725aa67b3b455f352b75cba538b664ec20ae3190c16bbf3bb"
+    },
+    "sensitivity": {
+      "file": "sensitivity.joblib",
+      "sha256": "47310b8da67e49f47d7e7942dbce346c83b69502ad4339d7c4b22b337097cae6"
+    }
+  }
+}

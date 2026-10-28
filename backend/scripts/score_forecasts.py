@@ -1,10 +1,6 @@
-"""Scores a period with the ACTIVE model and stores the forecasts.
+"""Score a period with the active model and persist one forecast per county.
 
-    python -m scripts.score_forecasts 2026-10 [--replace]
-
-Reads that period's rows from `observations` (see scripts.import_observations), runs the model's
-pipeline, and writes one forecast per county. Existing forecasts for the same model are kept unless
---replace is given.
+Run from backend/: python -m scripts.score_forecasts YYYY-MM [--replace]
 """
 
 import sys
@@ -25,39 +21,85 @@ def score(session: Session, settings: Settings, period: str, *, replace: bool = 
         raise SystemExit("No active model. Run: python -m scripts.activate_model <version>")
     model = load_model(settings.models_dir, version, allow_synthetic=not settings.is_production)
 
-    state_of = dict(session.execute(select(Geography.pcode, Geography.parent_pcode)).all())
-    obs = list(session.scalars(select(Observation).where(Observation.period == period)
-                               .order_by(Observation.county_pcode)))  # fmt: skip
+    geographies = list(session.scalars(select(Geography)))
+    by_code = {geo.pcode: geo for geo in geographies}
+    state_name_by_county: dict[str, str] = {}
+    county_name_by_code: dict[str, str] = {}
+    for geo in geographies:
+        if geo.level != "county":
+            continue
+        county_name_by_code[geo.pcode] = geo.name
+        parent = by_code.get(geo.parent_pcode or "")
+        if parent is None or parent.level != "state":
+            raise SystemExit(
+                f"Geography integrity error: county {geo.pcode} has no valid parent state."
+            )
+        state_name_by_county[geo.pcode] = parent.name
+
+    obs = list(
+        session.scalars(
+            select(Observation)
+            .where(Observation.period == period)
+            .order_by(Observation.county_pcode)
+        )
+    )
     if not obs:
         raise SystemExit(f"No observations for {period}. Import them first.")
+
+    missing_codes = sorted({o.county_pcode for o in obs} - set(county_name_by_code))
+    if missing_codes:
+        raise SystemExit(f"Observations reference unknown counties: {missing_codes}")
+
     if replace:
-        session.execute(delete(Forecast).where(Forecast.period == period,
-                                               Forecast.model_version == version))  # fmt: skip
+        session.execute(
+            delete(Forecast).where(Forecast.period == period, Forecast.model_version == version)
+        )
         session.flush()
-    have = set(session.scalars(select(Forecast.county_pcode).where(
-        Forecast.period == period, Forecast.model_version == version)))  # fmt: skip
-    todo = [o for o in obs if o.county_pcode not in have]
+    have = set(
+        session.scalars(
+            select(Forecast.county_pcode).where(
+                Forecast.period == period, Forecast.model_version == version
+            )
+        )
+    )
+    todo = [observation for observation in obs if observation.county_pcode not in have]
     if not todo:
         return 0
 
-    year, month = (int(x) for x in period.split("-"))
-    frame = build_frame({
-        "state": state_of[o.county_pcode], "county": o.county_pcode, "population": o.population,
-        "year": year, "month": month, "phase": o.prior_ipc_phase, "pct": o.phase3plus_pct,
-        "production": o.cereal_production_t, "gap": o.cereal_gap_t,
-    } for o in todo)  # fmt: skip
-    probs = model.pipeline.predict_proba(frame)[:, 1]
-    for o, p in zip(todo, probs, strict=True):
-        session.add(Forecast(county_pcode=o.county_pcode, period=period, model_version=version,
-                             risk_probability=round(float(p), 4)))  # fmt: skip
+    year, month = (int(value) for value in period.split("-"))
+    frame = build_frame(
+        {
+            "state": state_name_by_county[observation.county_pcode],
+            "county": county_name_by_code[observation.county_pcode],
+            "population": observation.population,
+            "year": year,
+            "month": month,
+            "phase": observation.prior_ipc_phase,
+            "pct": observation.phase3plus_pct,
+            "production": observation.cereal_production_t,
+            "gap": observation.cereal_gap_t,
+        }
+        for observation in todo
+    )
+    probabilities = model.pipeline.predict_proba(frame)[:, 1]
+    for observation, probability in zip(todo, probabilities, strict=True):
+        session.add(
+            Forecast(
+                county_pcode=observation.county_pcode,
+                period=period,
+                model_version=version,
+                risk_probability=round(float(probability), 4),
+            )
+        )
     session.commit()
     return len(todo)
 
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    args = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
     if len(args) != 1:
         sys.exit(__doc__)
     settings = get_settings()
-    with sessionmaker(make_engine(settings.database_url))() as s:
-        print(f"scored {score(s, settings, args[0], replace='--replace' in sys.argv)} counties")
+    with sessionmaker(make_engine(settings.database_url))() as session:
+        count = score(session, settings, args[0], replace="--replace" in sys.argv)
+        print(f"scored {count} counties")
