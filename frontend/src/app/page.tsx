@@ -4,7 +4,6 @@ import { PeriodSelect } from '@/components/layout/PeriodSelect';
 import { FoldChart } from '@/components/charts/FoldChart';
 import { ButtonLink } from '@/components/ui/Button';
 import { StatStrip } from '@/components/ui/StatStrip';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { getAreas, getCounties, getModel, getRisk, resolvePeriod } from '@/lib/api';
 import { bandFor, formatPct } from '@/lib/risk';
 import { shortName, titleCase } from '@/lib/format';
@@ -17,7 +16,43 @@ type Props = { searchParams: Promise<{ period?: string }> };
 export default async function Overview({ searchParams }: Props) {
   const { period: requested } = await searchParams;
   const { period, periods } = await resolvePeriod(requested);
-  if (!period) return <EmptyState title="No forecasts yet">Forecasts will appear here once a model has been run.</EmptyState>;
+  if (!period) {
+    const [states, counties, model] = await Promise.all([
+      getAreas('states'), getAreas('counties'), getModel(),
+    ]);
+    return (
+      <div className="space-y-14 lg:space-y-16">
+        <section className="max-w-3xl py-8 lg:py-14">
+          <p className="mb-4 text-xs font-medium uppercase tracking-[0.16em] text-tx3">Food security intelligence</p>
+          <h1 className="max-w-[13ch] text-[clamp(2.4rem,5vw,4.25rem)] font-light leading-none tracking-[-0.045em]">
+            South Sudan food security intelligence
+          </h1>
+          <p className="mt-5 max-w-[54ch] text-[clamp(1rem,1.6vw,1.2rem)] leading-[1.5] text-tx2">
+            Geographic coverage and model information are available, but no forecast periods have been published yet. Current county risk estimates are therefore not displayed.
+          </p>
+          <div className="mt-7 flex flex-wrap gap-2.5">
+            <ButtonLink href="/predict" variant="primary">Predict a scenario</ButtonLink>
+            <ButtonLink href="/model">Review the model</ButtonLink>
+          </div>
+        </section>
+        <StatStrip
+          label="Available geography and model information"
+          items={[
+            { label: 'Geographic states', value: String(states.features.length) },
+            { label: 'Geographic counties', value: String(counties.features.length) },
+            { label: 'Training periods', value: String(model.training_periods) },
+            { label: 'Training counties', value: String(model.training_counties) },
+          ]}
+        />
+        <section className="max-w-3xl border-t border-line pt-6">
+          <h2 className="text-lg font-medium">Why are risk estimates missing?</h2>
+          <p className="mt-2 text-sm leading-6 text-tx2">
+            The service has not published forecast records for a period. The map and risk rankings will appear when valid forecast outputs are available; no historical observations or risk values are fabricated to fill this gap.
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   const [states, stateRisk, counties, model] = await Promise.all([
     getAreas('states'), getRisk('states', period), getCounties(period), getModel(),
